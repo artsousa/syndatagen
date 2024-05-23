@@ -15,16 +15,14 @@ from transformers import GenerationConfig, TextStreamer
 from utils.evol_utils import createConstraintsPrompt, createDeepenPrompt, createConcretizingPrompt, createReasoningPrompt
 
 
-# Você deve tentar o seu melhor para não tornar o #Prompt Reescrito# detalhado, #Prompt Reescrito# só pode adicionar 10 a 20 palavras em #Prompt Dado#. \r\n\'#Prompt Dado#', '#Prompt Reescrito#', 'prompt dado' e 'prompt reescrito' não podem aparecer em #Prompt Reescrito#\r\n
-
 def generate(text, model, tokenizer, context:str = None, max_tokens: int = 1024, skip_special = True, debug = False):
-    messages = [{"role": "sistema", "content": "Você é um assistente que ira receber uma instrução e fará apenas o que está sendo pedido. Se o #Contexto# for passado, sempre o use para responder o usuário. O #Contexto# não deve ser mencionado na resposta."},
+    messages = [{"role": "sistema", "content": "Você é um assistente útil que ira receber uma instrução e fará apenas o que está sendo pedido. Se o #Contexto# for passado, sempre o use para responder o usuário. O #Contexto# não deve ser mencionado na resposta. Não extenda suas respostas explicando o que foi considerado para responder."},
             {"role": "usuário", "content": text}]
 
     messages[1]['content'] += f"\r\n#Contexto#:\r\n{context}" if context else ''
 
     prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
-    prompt += "<|im_start|>assistente\n" + "#Prompt Reescrito#:\r\n" if not context else '' 
+    prompt += "<|start_header_id|>assistente<|end_header_id|>\n" + "#Prompt Reescrito#:\r\n" if not context else '' 
     
     if debug: 
         print(f"\n\n ############ prompt: {prompt} \n\n ")
@@ -32,15 +30,18 @@ def generate(text, model, tokenizer, context:str = None, max_tokens: int = 1024,
     inputs = tokenizer(prompt, return_tensors="pt")
     input_ids = inputs["input_ids"].cuda()
 
+    terminators = [tokenizer.eos_token_id, tokenizer.convert_tokens_to_ids("<|eot_id|>")]
+
     generation_output = model.generate(
         input_ids=input_ids,
         return_dict_in_generate=True,
         output_scores=True,
         max_new_tokens=max_tokens,
-        early_stopping=True,
-        temperature=0.4,
+        early_stopping=False,
+        temperature=0.75,
         do_sample=True,
         pad_token_id=tokenizer.pad_token_id,
+        eos_token_id=terminators,
         top_k=40,
         #min_p=0.05,
         top_p=0.95,
@@ -60,11 +61,11 @@ if __name__ == '__main__':
     n = 1000
     samples = []
     ds = DatasetDict()
-    output_file = 'results/result.csv'
+    output_file = 'results/result_llama8b.csv'
     
     ## local file load and save
-    savesamples_csv = True
-    load_from_file = False
+    savesamples_csv = False
+    load_from_file = True
     
     pointer = DatasetDict()
     if not load_from_file:
@@ -85,7 +86,7 @@ if __name__ == '__main__':
     pointer['train'] = Dataset.from_list(samples)
     
     device = 'cuda'
-    model_list = ['TheBloke/Mistral-7B-OpenOrca-AWQ']
+    model_list = ['casperhansen/llama-3-8b-instruct-awq']
     
     ## save interval
     save_step = 50
@@ -120,6 +121,7 @@ if __name__ == '__main__':
                 # print(f"\n\n\nselected: {selected_evol_prompt}")
                 evol_instruction = generate(ins[list(ins.keys())[0]], model, tokenizer, debug=False)
                 # print(f"\n\n########### instruction: {evol_instruction}")
+
                 answer = generate(evol_instruction, model, tokenizer, context=cur_obj['positive'].strip(), debug=False, max_tokens=2048)
                 # print(f"\n\n ########## positive: {answer}")
                 line[list(ins.keys())[0]] = str({'instruction': evol_instruction, 'positive': answer})
