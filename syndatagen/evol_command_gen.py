@@ -16,13 +16,13 @@ from utils.evol_utils import createConstraintsPrompt, createDeepenPrompt, create
 
 
 def generate(text, model, tokenizer, context:str = None, max_tokens: int = 1024, skip_special = True, debug = False):
-    messages = [{"role": "sistema", "content": "Você é um assistente que ira receber uma instrução e fará apenas o que está sendo pedido. Se o #Contexto# for passado, sempre o use para responder o usuário. O #Contexto# não deve ser mencionado na resposta."},
-            {"role": "usuário", "content": text}]
+    messages = [{"role": "system", "content": "Você é um assistente que ira receber uma instrução e fará apenas o que está sendo pedido. Se o #Contexto# for passado, sempre o use para responder o usuário. O #Contexto# não deve ser mencionado na resposta."},
+            {"role": "user", "content": text}]
 
     messages[1]['content'] += f"\r\n#Contexto#:\r\n{context}" if context else ''
 
     prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
-    prompt += "<|im_start|>assistente\n" + "#Prompt Reescrito#:\r\n" if not context else '' 
+    prompt += "<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>\n" + "#Prompt Reescrito#:\r\n" if not context else '' 
     
     if debug:
         print(f"\n\n ############ prompt: {prompt} \n\n ")
@@ -30,7 +30,7 @@ def generate(text, model, tokenizer, context:str = None, max_tokens: int = 1024,
     inputs = tokenizer(prompt, return_tensors="pt")
     input_ids = inputs["input_ids"].cuda()
 
-    terminators = [tokenizer.eos_token_id, tokenizer.convert_tokens_to_ids("<|eot_id|>")]
+    # terminators = [tokenizer.eos_token_id, tokenizer.convert_tokens_to_ids("<|eot_id|>")]
 
     generation_output = model.generate(
         input_ids=input_ids,
@@ -38,10 +38,10 @@ def generate(text, model, tokenizer, context:str = None, max_tokens: int = 1024,
         output_scores=True,
         max_new_tokens=max_tokens,
         early_stopping=True,
-        temperature=0.4,
+        temperature=0.65,
         do_sample=True,
         pad_token_id=tokenizer.pad_token_id,
-        eos_token_id=terminators,
+        #eos_token_id=terminators,
         top_k=40,
         #min_p=0.05,
         top_p=0.95,
@@ -61,7 +61,7 @@ if __name__ == '__main__':
     n = 1000
     samples = []
     ds = DatasetDict()
-    output_file = 'results/result_commandrplus.csv'
+    output_file = 'results/result_commandrplus_0.csv'
     
     ## local file load and save
     savesamples_csv = False
@@ -104,9 +104,10 @@ if __name__ == '__main__':
         
         model = AutoModelForCausalLM.from_pretrained(model_name, device_map='balanced', cache_dir='/home/main/.tmp/')
         # model = model.to(device)
+        # model = None
 
         evol_objs = []
-        for i in tqdm(range(100)) :
+        for i in tqdm(range(0, 100)) :
             cur_obj = pointer['train'][i]
             negative = cur_obj['negative']
             instruction = cur_obj['query'].strip()
@@ -123,6 +124,7 @@ if __name__ == '__main__':
                 # print(f"\n\n\nselected: {selected_evol_prompt}")
                 evol_instruction = generate(ins[list(ins.keys())[0]], model, tokenizer, debug=False)
                 # print(f"\n\n########### instruction: {evol_instruction}")
+                
                 answer = generate(evol_instruction, model, tokenizer, context=cur_obj['positive'].strip(), debug=False, max_tokens=2048)
                 # print(f"\n\n ########## positive: {answer}")
                 line[list(ins.keys())[0]] = str({'instruction': evol_instruction, 'positive': answer})

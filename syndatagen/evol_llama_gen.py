@@ -6,16 +6,21 @@ import pandas as pd
 from tqdm.auto import tqdm
 from datasets import load_dataset
 from datasets import Dataset, DatasetDict
-from awq import AutoAWQForCausalLM
+# from awq import AutoAWQForCausalLM
 from transformers import pipeline
 from transformers import AutoModelForCausalLM
 from transformers import AutoTokenizer
 from transformers import GenerationConfig, TextStreamer
 
+import huggingface_hub as hf
+
+access_token = "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"
+hf.login(token=access_token)
+
 from utils.evol_utils import createConstraintsPrompt, createDeepenPrompt, createConcretizingPrompt, createReasoningPrompt
 import os
 
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+# os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 def generate(text, model, tokenizer, context:str = None, max_tokens: int = 1024, skip_special = True, debug = False):
     messages = [{"role": "sistema", "content": "Você é um assistente útil que ira receber uma instrução e fará apenas o que está sendo pedido. Se o #Contexto# for passado, sempre o use para responder o usuário. O #Contexto# não deve ser mencionado na resposta. Não extenda suas respostas explicando o que foi considerado para responder."},
@@ -63,7 +68,7 @@ if __name__ == '__main__':
     n = 1000
     samples = []
     ds = DatasetDict()
-    output_file = 'results/result_llama8b_v4.csv'
+    output_file = 'results/result_llama70b2.csv'
     
     ## local file load and save
     savesamples_csv = False
@@ -88,7 +93,8 @@ if __name__ == '__main__':
     pointer['train'] = Dataset.from_list(samples)
     
     device = 'cuda'
-    model_list = ['adalbertojunior/Llama-3-8B-Instruct-Portuguese-v0.4']
+    
+    model_list = ['meta-llama/Meta-Llama-3-70B-Instruct']
     
     ## save interval
     save_step = 50
@@ -102,15 +108,15 @@ if __name__ == '__main__':
         
         ## load model awq
         #model = AutoAWQForCausalLM.from_quantized(model_name, device_map='balanced', trust_remote_code=True, 
-        #                                            fuse_layers=True, safetensors=True, cache_dir='/home/main/.tmp/')
+                                                    # fuse_layers=True, safetensors=True, cache_dir='/home/main/.tmp/')
         
-        ## load model normal 
-        model = AutoModelForCausalLM.from_pretrained(model_name, device_map='auto', torch_dtype=torch.bfloat16)
+        # load model normal 
+        model = AutoModelForCausalLM.from_pretrained(model_name, device_map='auto', torch_dtype=torch.float16)
 
         model = model.to(device)
 
         evol_objs = []
-        for i in tqdm(range(200)) :
+        for i in tqdm(range(100)) :
             cur_obj = pointer['train'][i]
             negative = cur_obj['negative']
             instruction = cur_obj['query'].strip()
