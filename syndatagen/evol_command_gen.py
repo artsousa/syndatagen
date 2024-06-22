@@ -61,7 +61,7 @@ if __name__ == '__main__':
     n = 1000
     samples = []
     ds = DatasetDict()
-    output_file = 'results/result_commandrplus_0.csv'
+    output_file = 'results/result_commandrplus_1.csv'
     
     ## local file load and save
     savesamples_csv = False
@@ -107,7 +107,7 @@ if __name__ == '__main__':
         # model = None
 
         evol_objs = []
-        for i in tqdm(range(0, 100)) :
+        for i in tqdm(range(100, 200)) :
             cur_obj = pointer['train'][i]
             negative = cur_obj['negative']
             instruction = cur_obj['query'].strip()
